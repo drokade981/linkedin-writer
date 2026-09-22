@@ -1,7 +1,7 @@
 import { END, START, StateGraph } from "@langchain/langgraph";
 import { State } from "./state.ts";
 import { model } from "./model.ts";
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 async function writer(state: typeof State.State) {
     // call llm3
@@ -29,7 +29,8 @@ async function writer(state: typeof State.State) {
 
 async function critique(state: typeof State.State) {
     // call llm
-    const SYSTEM_PROMPT = `You are a tough Linkedin critique assistant for beginner devs
+    const SYSTEM_PROMPT = `You are a Linkedin post critique. Your task is to give feedback on previously generated Linkedin post by writer ai agent.
+    
     Priority: remove buzzwords/cliches, keep it clean, specific, and relatable.
     
     Ccheck agaisnt:
@@ -41,14 +42,18 @@ async function critique(state: typeof State.State) {
     6. 150-250 words, Max 2 relevant emojis, authentic tone, no controversy.
     
     Output format (no scores, no questions, no meta):
-    Start with:
+    Start with exactly:
     "Revise now. Apply all changes below. Output only the revised post text."
     
-    Then list all changes in bullet points. Fixes that are direct edit instructions( e.g., "Trim intro to 2lines with pain point hook", "Replace 'leverage/impactful' with simple verbs", "And 1 analogy for <term>, "End eith CTA: 'Follow for more bite-sized dev tips'").`;
+    Then list only in bullet points FIXES(edit instructions). Do NOT include any rewritten sentences or paragraphs. Do NOT write the post.
+    
+    Return only the fixes.`;
+
+    const lastAIMessage = [...state.messages].reverse().find(m => m.getType() == 'ai');
     
     const response = await model.invoke([
         new SystemMessage(SYSTEM_PROMPT),
-        ...state.messages
+        lastAIMessage as AIMessage
     ]);
     
     return { messages: [ new HumanMessage(response.content) ], revisions: state.revisions ? state.revisions as number + 1 : 1 };
@@ -56,7 +61,7 @@ async function critique(state: typeof State.State) {
 
 function shouldContinue(state: typeof State.State) {
     // condition logic
-    if (state.revisions && (state.revisions as number) >= 5) {
+    if (state.revisions && (state.revisions as number) >= 2) {
         return END;
     }
     return 'critique';
